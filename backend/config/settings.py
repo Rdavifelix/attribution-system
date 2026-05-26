@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     meta_app_secret: str = ""
     meta_ad_account_id: str = ""
     meta_api_version: str = "v21.0"
+    meta_oauth_redirect_uri: str = "http://localhost:8000/auth/meta/callback"
 
     # GoHighLevel
     ghl_private_token: str = ""

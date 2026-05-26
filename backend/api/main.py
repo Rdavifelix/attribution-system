@@ -21,6 +21,7 @@ from backend.db.client import init_db, db
 from backend.config.depara import load_from_db
 from backend.api.routes.health import router as health_router
 from backend.api.routes.dashboard import router as dashboard_router
+from backend.api.routes.auth_meta import router as meta_auth_router
 from backend.ingest.ghl_webhook import router as ghl_router
 
 logging.basicConfig(
@@ -48,6 +49,7 @@ app.add_middleware(
 # ─── Rotas ───────────────────────────────────────────────────────────────────
 app.include_router(health_router)
 app.include_router(dashboard_router)
+app.include_router(meta_auth_router)
 app.include_router(ghl_router, prefix="/ingest")
 
 # ─── Scheduler ───────────────────────────────────────────────────────────────

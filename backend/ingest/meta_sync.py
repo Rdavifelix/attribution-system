@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://graph.facebook.com"
 
+
+def _get_token() -> str:
+    """Gets Meta token: first tries DB (OAuth token), then falls back to env var."""
+    # Try DB first (OAuth flow token)
+    try:
+        res = db.table("system_settings").select("value").eq("key", "meta_access_token").execute()
+        if res.data and res.data[0]["value"]:
+            return res.data[0]["value"]
+    except Exception:
+        pass
+    # Fall back to env var (System User Token)
+    if settings.meta_system_user_token:
+        return settings.meta_system_user_token
+    raise ValueError("Meta token não configurado. Acesse /auth/meta para conectar.")
+
 FIELDS = ",".join([
     "campaign_id",
     "campaign_name",
@@ -44,7 +59,7 @@ def _headers() -> dict:
 
 
 def _params_base() -> dict:
-    return {"access_token": settings.meta_system_user_token}
+    return {"access_token": _get_token()}
 
 
 def _date_range(days_back: int = 7) -> tuple[str, str]:

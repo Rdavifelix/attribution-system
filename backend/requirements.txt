@@ -3,7 +3,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
 # Banco de dados
-supabase==2.7.4
+supabase==2.30.0
 
 # Configuração
 pydantic-settings==2.4.0

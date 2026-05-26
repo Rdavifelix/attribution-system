@@ -122,6 +122,36 @@ export const apiQuality = (funnel_id: number) =>
 export const apiFunnels = () =>
   get<{ funnels: Funnel[] }>("/api/dashboard/funnels");
 
+// ─── Meta OAuth ───────────────────────────────────────────────────────────────
+export async function fetchMetaStatus() {
+  const res = await fetch(`${API_BASE}/auth/meta/status`);
+  return res.json();
+}
+
+export async function fetchMetaAccounts() {
+  const res = await fetch(`${API_BASE}/auth/meta/accounts`);
+  if (!res.ok) throw new Error("Erro ao buscar contas Meta");
+  return res.json();
+}
+
+export async function selectMetaAccount(accountId: string, funnelId = 1) {
+  const res = await fetch(`${API_BASE}/auth/meta/account`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_id: accountId, funnel_id: funnelId }),
+  });
+  return res.json();
+}
+
+export async function disconnectMeta() {
+  const res = await fetch(`${API_BASE}/auth/meta`, { method: "DELETE" });
+  return res.json();
+}
+
+export function getMetaAuthUrl() {
+  return `${API_BASE}/auth/meta`;
+}
+
 // ─── Helpers de formatação ──────────────────────────────────────────────────
 
 export const fmt = {
