@@ -9,9 +9,13 @@ DELETE /auth/meta            → desconecta (remove token do banco)
 GET  /auth/meta/status       → retorna se está conectado e qual conta
 """
 from __future__ import annotations
+
+from typing import Optional
+
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
+
 from backend.config.settings import settings
 from backend.db.client import db
 
@@ -22,17 +26,20 @@ FB_GRAPH_URL = "https://graph.facebook.com"
 SCOPES = "ads_read,ads_management,business_management,read_insights"
 
 
-def _get_stored_token() -> str | None:
-    res = db.table("system_settings").select("value").eq("key", "meta_access_token").execute()
-    if res.data:
-        return res.data[0]["value"]
+def _get_stored_token() -> Optional[str]:
+    try:
+        res = db.table("system_settings").select("value").eq("key", "meta_access_token").execute()
+        if res.data:
+            return res.data[0]["value"]
+    except Exception:
+        pass  # tabela ainda não criada
     return None
 
 
 def _save_token(token: str) -> None:
     db.table("system_settings").upsert(
         {"key": "meta_access_token", "value": token},
-        on_conflict="key"
+        on_conflict="key",
     ).execute()
 
 
@@ -50,7 +57,10 @@ def meta_oauth_start():
 
 
 @router.get("/callback")
-def meta_oauth_callback(code: str | None = None, error: str | None = None):
+def meta_oauth_callback(
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+):
     """
     Facebook redireciona aqui com ?code=xxx
     Troca o code por um short-lived token, depois converte para long-lived (60 dias).
@@ -127,7 +137,10 @@ def list_meta_accounts():
     """Lista todas as contas de anúncio disponíveis para o token salvo."""
     token = _get_stored_token()
     if not token:
-        raise HTTPException(status_code=401, detail="Meta não conectado. Acesse /auth/meta primeiro.")
+        raise HTTPException(
+            status_code=401,
+            detail="Meta não conectado. Acesse /auth/meta primeiro.",
+        )
 
     resp = httpx.get(
         f"{FB_GRAPH_URL}/{settings.meta_api_version}/me/adaccounts",
@@ -147,7 +160,13 @@ def list_meta_accounts():
     funnel = db.table("funnels").select("meta_ad_account_id").eq("id", 1).execute()
     selected = funnel.data[0]["meta_ad_account_id"] if funnel.data else None
 
-    STATUS_LABELS = {1: "Ativa", 2: "Desativada", 3: "Não confirmada", 7: "Pendente", 9: "Em revisão"}
+    STATUS_LABELS = {
+        1: "Ativa",
+        2: "Desativada",
+        3: "Não confirmada",
+        7: "Pendente",
+        9: "Em revisão",
+    }
 
     return {
         "accounts": [
@@ -183,7 +202,7 @@ def select_meta_account(payload: dict):
     # Também salva no system_settings (para o meta_sync usar)
     db.table("system_settings").upsert(
         {"key": f"meta_ad_account_id_funnel_{funnel_id}", "value": account_id},
-        on_conflict="key"
+        on_conflict="key",
     ).execute()
 
     return {"ok": True, "account_id": account_id, "funnel_id": funnel_id}

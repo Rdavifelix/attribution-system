@@ -17,7 +17,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from backend.config.settings import settings
-from backend.db.client import init_db, db
+from backend.db.client import init_db, get_client
 from backend.config.depara import load_from_db
 from backend.api.routes.health import router as health_router
 from backend.api.routes.dashboard import router as dashboard_router
@@ -96,10 +96,11 @@ async def startup():
 
     # Inicializa cliente do Supabase
     init_db()
+    _db = get_client()  # referência local ao client já inicializado
 
     # Carrega tabela de-para do banco para cache em memória
     try:
-        rows = db.table("depara_status").select("*").execute().data or []
+        rows = _db.table("depara_status").select("*").execute().data or []
         load_from_db(rows)
         logger.info(f"De-para carregado: {len(rows)} mapeamentos")
     except Exception as exc:
