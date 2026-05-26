@@ -69,17 +69,20 @@ def compute_call_realizada(
     Decide se a call realmente aconteceu.
 
     Prioridade das regras (da mais específica para a mais genérica):
-    1. STATUS CALL = REALIZADA_COM_VENDA → TRUE
-    2. STATUS CALL ∈ NO_SHOW_CALL_NORMS → FALSE
-    3. STATUS CALL = REAGENDADA → FALSE (foi para outra data)
-    4. STATUS CALL vazio E STATUS VENDA ∈ VENDA_IMPLICA_CALL → TRUE
-    5. STATUS CALL vazio E data_call preenchida → TRUE (inferido)
-    6. Caso contrário → FALSE
+    1. STATUS CALL = REALIZADA_COM_VENDA → TRUE  (call + venda no mesmo status)
+    2. STATUS CALL = REALIZADA → TRUE             (call aconteceu, sem venda)
+    3. STATUS CALL ∈ NO_SHOW_CALL_NORMS → FALSE
+    4. STATUS CALL = REAGENDADA → FALSE (foi para outra data)
+    5. STATUS CALL vazio E STATUS VENDA ∈ VENDA_IMPLICA_CALL → TRUE
+    6. STATUS CALL vazio E data_call preenchida → TRUE (inferido)
+    7. Caso contrário → FALSE
     """
     sc = status_call_norm or "VAZIO"
     sv = status_venda_norm or "VAZIO"
 
     if sc == "REALIZADA_COM_VENDA":
+        return True
+    if sc == "REALIZADA":
         return True
     if sc in NO_SHOW_CALL_NORMS:
         return False

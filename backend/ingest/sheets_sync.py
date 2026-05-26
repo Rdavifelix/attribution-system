@@ -5,7 +5,7 @@ Fluxo por linha:
   1. Normaliza email/telefone (chaves de cruzamento)
   2. UPSERT em `leads` (enriquece registro GHL ou cria novo)
   3. Desempilha Call 1 (colunas 12-27) → aplica de-para → aplica deriver → UPSERT em `calls`
-  4. Se bloco Call 2 (cols 28-34) tiver data → idem para Call 2
+  4. Se bloco Call 2 (cols 30-36) tiver data → idem para Call 2
   5. Consolida flags do lead (tem_call_realizada, virou_venda, etc.)
   6. Armazena linha bruta em raw_planilha
 
@@ -58,21 +58,27 @@ COL1_MOTIVO_NOSHOW  = 18
 COL1_CASH           = 19
 COL1_VALOR_TOTAL    = 20
 COL1_CLOSER         = 21
-COL1_VALOR          = 22
-COL1_DATA_VENDA     = 23
-COL1_PRODUTO        = 24   # CONCLUSÃO → produto (MFA/PAA)
+COL1_PRODUTO        = 22   # 'Produto vendido' → MFA / PAA / MR
+COL1_VALOR          = 23   # 'VALOR DA OPORTUNIDADE'
+COL1_DATA_VENDA     = 24   # 'DATA CONCLUSÃO'
 COL1_RAZAO_PERDA    = 25
 COL1_LINK_REUNIAO   = 26
 COL1_OBSERVACOES    = 27
 
+# Colunas 28 e 29 são vazias na planilha (separador visual)
+
 # Bloco CALL 2 (mais curto; closer herda da Call 1)
-COL2_DATA_AGEND     = 28
-COL2_HORA_CALL      = 29
-COL2_STATUS_CALL    = 30
-COL2_STATUS_VENDA   = 31
-COL2_MOTIVO_NOSHOW  = 32
-COL2_CASH           = 33
-COL2_VALOR_TOTAL    = 34
+# Começa no índice 30 conforme cabeçalho real da planilha
+COL2_DATA_AGEND     = 30   # 'DATA 2 CALL'
+COL2_HORA_CALL      = 31   # 'HORA 2 CALL'
+COL2_STATUS_CALL    = 32   # 'STATUS CALL'
+COL2_STATUS_VENDA   = 33   # 'STATUS VENDA'
+COL2_MOTIVO_NOSHOW  = 34   # 'MOTIVO NOSHOW'
+COL2_CASH           = 35   # 'CASH COLLECTED'
+COL2_VALOR_TOTAL    = 36   # 'VALOR TOTAL'
+
+# Coluna extra — fórmula na planilha, pode ter #N/A
+COL_AD_NAME_EMAIL   = 37   # 'AD NAME Email'
 
 
 def _cell(row: list, col: int) -> str:
@@ -96,7 +102,12 @@ def _get_sheet_rows(sheet_id: str, tab_name: str) -> list[list]:
     ws = sheet.worksheet(tab_name)
     # Retorna tudo como strings (values_render_option=FORMATTED_VALUE é o padrão)
     rows = ws.get_all_values()
-    return rows[1:] if rows else []  # pula cabeçalho
+    # A planilha tem 3 linhas iniciais a pular:
+    #   Linha 1 = cabeçalho principal
+    #   Linha 2 = linha de totais/resumo (ex: contagem de VENDAS, SINAL…)
+    #   Linha 3 = sub-cabeçalho duplicado
+    # Os dados reais começam na linha 4 (índice 3)
+    return rows[3:] if rows else []
 
 
 def _build_call_dict(
@@ -287,6 +298,36 @@ def _update_lead_flags(lead_id: str) -> None:
     db.table("leads").update(flags).eq("id", lead_id).execute()
 
 
+def _load_existing_leads(funnel_id: int) -> tuple[dict, dict]:
+    """
+    Carrega email_norm → id e telefone_norm → id de todos os leads do funil.
+    Usado no modo batch para eliminar SELECT por linha.
+    """
+    email_map: dict[str, str] = {}
+    phone_map: dict[str, str] = {}
+    page = 0
+    page_size = 1000
+    while True:
+        res = (
+            db.table("leads")
+            .select("id, email_norm, telefone_norm")
+            .eq("funnel_id", funnel_id)
+            .range(page * page_size, (page + 1) * page_size - 1)
+            .execute()
+        )
+        if not res.data:
+            break
+        for r in res.data:
+            if r.get("email_norm"):
+                email_map[r["email_norm"]] = r["id"]
+            if r.get("telefone_norm"):
+                phone_map[r["telefone_norm"]] = r["id"]
+        if len(res.data) < page_size:
+            break
+        page += 1
+    return email_map, phone_map
+
+
 def sync_sheet(
     sheet_id: str | None = None,
     tab_name: str | None = None,
@@ -295,6 +336,9 @@ def sync_sheet(
     """
     Ponto de entrada principal.
     Retorna um resumo com contadores de linhas processadas.
+
+    Modo batch: pré-carrega leads existentes em memória para eliminar
+    SELECT duplicados e acelerar sync em 5-10x vs modo linha-a-linha.
     """
     sheet_id  = sheet_id  or settings.sheet_id
     tab_name  = tab_name  or settings.sheet_tab
@@ -305,12 +349,78 @@ def sync_sheet(
     rows = _get_sheet_rows(sheet_id, tab_name)
     stats = {"linhas": len(rows), "leads": 0, "calls": 0, "erros": 0}
 
-    for i, row in enumerate(rows, start=2):  # linha 2 = primeira linha de dados
+    # Pré-carrega leads existentes (evita N SELECTs por linha)
+    email_cache, phone_cache = _load_existing_leads(funnel_id)
+    logger.info(f"[sheets_sync] Leads em cache: {len(email_cache)} emails, {len(phone_cache)} telefones")
+
+    # Lista de lead_ids a ter flags recalculadas no final
+    processed_lead_ids: list[str] = []
+
+    for i, row in enumerate(rows, start=4):  # linha 4 = primeira linha de dados reais
         try:
-            lead_id = _upsert_lead(row, funnel_id)
-            if not lead_id:
+            email_n   = normalize_email(_cell(row, COL_EMAIL))
+            telefone_n= normalize_phone(_cell(row, COL_TELEFONE))
+
+            if not email_n and not telefone_n:
                 stats["erros"] += 1
                 continue
+
+            # Lookup em cache primeiro
+            existing_id: str | None = (
+                email_cache.get(email_n) if email_n else None
+            ) or (
+                phone_cache.get(telefone_n) if telefone_n else None
+            )
+
+            if existing_id:
+                # Atualiza em vez de consultar banco
+                update_data = {
+                    "nome":            _cell(row, COL_NOME) or None,
+                    "origem_planilha": _cell(row, COL_ORIGEM) or None,
+                    "instagram":       _cell(row, COL_INSTAGRAM) or None,
+                    "faturamento":     _cell(row, COL_FATURAMENTO) or None,
+                    "profissao":       _cell(row, COL_PROFISSAO) or None,
+                    "mql":             _cell(row, COL_MQL) or None,
+                    "tem_socio":       _cell(row, COL_SOCIO) or None,
+                    "lead_scoring":    _cell(row, COL_LEAD_SCORING) or None,
+                    "data_cadastro":   normalize_date(_cell(row, COL_DATA_CADASTRO)),
+                    "data_contato":    normalize_date(_cell(row, COL_DATA_CONTATO)),
+                    "raw_planilha":    row,
+                    "updated_at":      datetime.utcnow().isoformat(),
+                }
+                update_data = {k: v for k, v in update_data.items() if v is not None}
+                db.table("leads").update(update_data).eq("id", existing_id).execute()
+                lead_id = existing_id
+            else:
+                # INSERT novo lead
+                lead_data = {
+                    "funnel_id":       funnel_id,
+                    "email_norm":      email_n,
+                    "telefone_norm":   telefone_n,
+                    "nome":            _cell(row, COL_NOME) or None,
+                    "origem_planilha": _cell(row, COL_ORIGEM) or None,
+                    "instagram":       _cell(row, COL_INSTAGRAM) or None,
+                    "faturamento":     _cell(row, COL_FATURAMENTO) or None,
+                    "profissao":       _cell(row, COL_PROFISSAO) or None,
+                    "mql":             _cell(row, COL_MQL) or None,
+                    "tem_socio":       _cell(row, COL_SOCIO) or None,
+                    "lead_scoring":    _cell(row, COL_LEAD_SCORING) or None,
+                    "data_cadastro":   normalize_date(_cell(row, COL_DATA_CADASTRO)),
+                    "data_contato":    normalize_date(_cell(row, COL_DATA_CONTATO)),
+                    "raw_planilha":    row,
+                    "origem_registro": "planilha",
+                    "updated_at":      datetime.utcnow().isoformat(),
+                }
+                res = db.table("leads").insert(lead_data).execute()
+                if not res.data:
+                    stats["erros"] += 1
+                    continue
+                lead_id = res.data[0]["id"]
+                # Atualiza cache local para evitar duplicata se mesma pessoa aparecer duas vezes
+                if email_n:
+                    email_cache[email_n] = lead_id
+                if telefone_n:
+                    phone_cache[telefone_n] = lead_id
 
             stats["leads"] += 1
             closer_call1 = _cell(row, COL1_CLOSER)
@@ -327,12 +437,19 @@ def sync_sheet(
                 _upsert_call(call2)
                 stats["calls"] += 1
 
-            # Atualiza flags consolidadas do lead
-            _update_lead_flags(lead_id)
+            processed_lead_ids.append(lead_id)
 
         except Exception as exc:
             logger.error(f"[sheets_sync] Erro na linha {i}: {exc}", exc_info=True)
             stats["erros"] += 1
+
+    # Recalcula flags de todos os leads processados em uma passagem final
+    logger.info(f"[sheets_sync] Recalculando flags de {len(processed_lead_ids)} leads...")
+    for lead_id in processed_lead_ids:
+        try:
+            _update_lead_flags(lead_id)
+        except Exception as exc:
+            logger.warning(f"[sheets_sync] Erro ao atualizar flags do lead {lead_id}: {exc}")
 
     logger.info(f"[sheets_sync] Concluído — {stats}")
     return stats

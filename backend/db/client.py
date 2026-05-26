@@ -2,6 +2,7 @@
 Singleton do cliente Supabase.
 Importar `db` em qualquer módulo para acessar o banco.
 """
+from __future__ import annotations
 from supabase import create_client, Client
 from backend.config.settings import settings
 

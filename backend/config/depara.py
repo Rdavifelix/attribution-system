@@ -13,7 +13,10 @@ from __future__ import annotations
 
 STATUS_CALL_MAP: dict[str, str] = {
     "VENDA - EM CALL":        "REALIZADA_COM_VENDA",
+    "CALL REALIZADA":         "REALIZADA",          # 617 ocorrências — call aconteceu, sem venda
     "CALL NÃO REALIZADA":     "NAO_REALIZADA",
+    "NÃO COMPARECEU":         "NAO_REALIZADA",      # valor no bloco Call 2
+    "NAO COMPARECEU":         "NAO_REALIZADA",
     "CALL REAGENDADA":        "REAGENDADA",
     "CALL CANCELADA":         "CANCELADA",
     "":                       "VAZIO",
@@ -22,9 +25,12 @@ STATUS_CALL_MAP: dict[str, str] = {
 STATUS_VENDA_MAP: dict[str, str] = {
     "VENDA - EM CALL":        "VENDA_EM_CALL",
     "VENDA - SINAL":          "VENDA_SINAL",
+    "VENDA":                  "VENDA_EM_CALL",      # valor no bloco Call 2
+    "Vendido":                "VENDA_EM_CALL",      # valor no bloco Call 2
     "SINAL RECEBIDO":         "SINAL_RECEBIDO",
     "REEMBOLSADA":            "REEMBOLSADA",
     "Follow UP":              "FOLLOW_UP",
+    "Follow UP ":             "FOLLOW_UP",          # trailing space
     "follow up":              "FOLLOW_UP",
     "FOLLOW UP":              "FOLLOW_UP",
     "2a reunião agendada":    "SEGUNDA_REUNIAO",
@@ -33,6 +39,7 @@ STATUS_VENDA_MAP: dict[str, str] = {
     "2ª reunião":             "SEGUNDA_REUNIAO",
     "REAGENDADA":             "REAGENDADA",
     "PERDIDA":                "PERDIDA",
+    "TESTE SYNC":             "VAZIO",              # entrada de teste — ignorar
     "":                       "VAZIO",
 }
 

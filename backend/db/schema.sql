@@ -20,16 +20,22 @@ CREATE TABLE IF NOT EXISTS depara_status (
 INSERT INTO depara_status (campo, valor_raw, valor_norm) VALUES
   -- STATUS CALL
   ('status_call', 'VENDA - EM CALL',       'REALIZADA_COM_VENDA'),
+  ('status_call', 'CALL REALIZADA',        'REALIZADA'),
   ('status_call', 'CALL NÃO REALIZADA',    'NAO_REALIZADA'),
+  ('status_call', 'NÃO COMPARECEU',        'NAO_REALIZADA'),
+  ('status_call', 'NAO COMPARECEU',        'NAO_REALIZADA'),
   ('status_call', 'CALL REAGENDADA',       'REAGENDADA'),
   ('status_call', 'CALL CANCELADA',        'CANCELADA'),
   ('status_call', '',                      'VAZIO'),
   -- STATUS VENDA
   ('status_venda', 'VENDA - EM CALL',      'VENDA_EM_CALL'),
   ('status_venda', 'VENDA - SINAL',        'VENDA_SINAL'),
+  ('status_venda', 'VENDA',               'VENDA_EM_CALL'),
+  ('status_venda', 'Vendido',             'VENDA_EM_CALL'),
   ('status_venda', 'SINAL RECEBIDO',       'SINAL_RECEBIDO'),
   ('status_venda', 'REEMBOLSADA',          'REEMBOLSADA'),
   ('status_venda', 'Follow UP',            'FOLLOW_UP'),
+  ('status_venda', 'Follow UP ',           'FOLLOW_UP'),
   ('status_venda', 'follow up',            'FOLLOW_UP'),
   ('status_venda', 'FOLLOW UP',            'FOLLOW_UP'),
   ('status_venda', '2a reunião agendada',  'SEGUNDA_REUNIAO'),
@@ -37,6 +43,7 @@ INSERT INTO depara_status (campo, valor_raw, valor_norm) VALUES
   ('status_venda', '2ª REUNIÃO',           'SEGUNDA_REUNIAO'),
   ('status_venda', 'REAGENDADA',           'REAGENDADA'),
   ('status_venda', 'PERDIDA',              'PERDIDA'),
+  ('status_venda', 'TESTE SYNC',           'VAZIO'),
   ('status_venda', '',                     'VAZIO')
 ON CONFLICT (campo, valor_raw) DO NOTHING;
 

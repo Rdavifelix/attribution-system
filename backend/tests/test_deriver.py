@@ -53,6 +53,14 @@ class TestComputeCallRealizada:
         """Venda reembolsada ainda implica que call aconteceu"""
         assert compute_call_realizada("VAZIO", "REEMBOLSADA", None, None) is True
 
+    def test_realizada_sem_venda(self):
+        """STATUS CALL = REALIZADA (617 ocorrências na planilha real) → call aconteceu"""
+        assert compute_call_realizada("REALIZADA", "VAZIO", None, None) is True
+
+    def test_realizada_com_followup(self):
+        """STATUS CALL = REALIZADA + STATUS VENDA = FOLLOW_UP → call aconteceu"""
+        assert compute_call_realizada("REALIZADA", "FOLLOW_UP", None, None) is True
+
 
 # ─── compute_houve_noshow ────────────────────────────────────────────────────
 
